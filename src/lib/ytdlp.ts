@@ -7,8 +7,17 @@
  */
 
 import { spawn } from "node:child_process";
-import { access, readdir, stat, mkdir } from "node:fs/promises";
+import {
+  access,
+  readdir,
+  stat,
+  mkdir,
+  rename,
+  copyFile,
+  unlink,
+} from "node:fs/promises";
 import { constants } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type {
   BinaryCheck,
@@ -17,8 +26,21 @@ import type {
   VideoMetadata,
 } from "@/types";
 
-/** Absolute path to the local downloads folder (./downloads). */
-export const DOWNLOAD_DIR = path.join(process.cwd(), "downloads");
+/**
+ * Final destination folder (./downloads by default, overridable via env).
+ * Finished videos are moved here.
+ */
+export const DOWNLOAD_DIR =
+  process.env.YTDL_DOWNLOAD_DIR ?? path.join(process.cwd(), "downloads");
+
+/**
+ * Staging folder where yt-dlp actually writes (the growing video file plus its
+ * temporary fragment files). It lives OUTSIDE the project tree on purpose: the
+ * Next dev server (Turbopack) watches the project root, and a large binary file
+ * being written there floods the file watcher and crashes the dev server with
+ * an out-of-memory error. We download to ~/.cache and move the final file in.
+ */
+const STAGING_DIR = path.join(os.homedir(), ".cache", "yt-downloader");
 
 /** yt-dlp format strings per selectable quality. */
 const FORMAT_STRINGS: Record<Quality, string> = {
@@ -178,6 +200,7 @@ export async function downloadVideo(
 
   try {
     await mkdir(DOWNLOAD_DIR, { recursive: true });
+    await mkdir(STAGING_DIR, { recursive: true });
 
     const args = [
       "--no-playlist",
@@ -190,7 +213,7 @@ export async function downloadVideo(
       "--progress-template",
       PROGRESS_TEMPLATE,
       "-o",
-      path.join(DOWNLOAD_DIR, OUTPUT_TEMPLATE),
+      path.join(STAGING_DIR, OUTPUT_TEMPLATE),
       url,
     ];
 
@@ -257,19 +280,31 @@ export async function downloadVideo(
           return;
         }
 
-        const finalPath = await resolveFinalPath(capturedPath, url);
-        if (!finalPath) {
+        const stagedPath = await resolveFinalPath(capturedPath, url);
+        if (!stagedPath) {
           reject(
             new Error("Download finished but the output file was not found."),
           );
           return;
         }
-        onEvent({
-          type: "done",
-          filename: path.basename(finalPath),
-          path: finalPath,
-        });
-        resolve();
+        try {
+          onEvent({ type: "merging", message: "Saving to downloads…" });
+          const finalPath = await moveToDownloads(stagedPath);
+          onEvent({
+            type: "done",
+            filename: path.basename(finalPath),
+            path: finalPath,
+          });
+          resolve();
+        } catch (err) {
+          reject(
+            new Error(
+              `Download finished but could not be moved to downloads: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            ),
+          );
+        }
       });
     });
   } finally {
@@ -305,8 +340,8 @@ function cleanField(value: string | undefined): string | null {
 }
 
 /**
- * Determines the final output path. Prefers the path parsed from yt-dlp
- * output; falls back to scanning the downloads dir for a file containing the
+ * Determines the staged output path. Prefers the path parsed from yt-dlp
+ * output; falls back to scanning the staging dir for a file containing the
  * video id, picking the most recently modified match.
  */
 async function resolveFinalPath(
@@ -316,25 +351,25 @@ async function resolveFinalPath(
   if (captured) {
     const abs = path.isAbsolute(captured)
       ? captured
-      : path.join(process.cwd(), captured);
+      : path.join(STAGING_DIR, captured);
     // The captured path may be a pre-merge stream; prefer the merged .mp4.
     const mp4 = abs.replace(/\.(f\d+\.)?(webm|mkv|m4a|mp4)$/i, ".mp4");
     if (await exists(mp4)) return mp4;
     if (await exists(abs)) return abs;
   }
 
-  // Fallback: match by video id within the downloads folder.
+  // Fallback: match by video id within the staging folder.
   const id = url.match(/[a-zA-Z0-9_-]{11}/g)?.pop();
   if (!id) return null;
   try {
-    const files = await readdir(DOWNLOAD_DIR);
+    const files = await readdir(STAGING_DIR);
     const matches = files.filter(
       (f) => f.includes(`[${id}]`) && f.toLowerCase().endsWith(".mp4"),
     );
     if (matches.length === 0) return null;
     const withTimes = await Promise.all(
       matches.map(async (f) => {
-        const p = path.join(DOWNLOAD_DIR, f);
+        const p = path.join(STAGING_DIR, f);
         const st = await stat(p);
         return { p, mtime: st.mtimeMs };
       }),
@@ -344,6 +379,26 @@ async function resolveFinalPath(
   } catch {
     return null;
   }
+}
+
+/**
+ * Moves a staged file into DOWNLOAD_DIR. Uses a fast rename when both live on
+ * the same filesystem; falls back to copy + unlink across devices (EXDEV).
+ * Returns the final path in DOWNLOAD_DIR.
+ */
+async function moveToDownloads(stagedPath: string): Promise<string> {
+  const dest = path.join(DOWNLOAD_DIR, path.basename(stagedPath));
+  try {
+    await rename(stagedPath, dest);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "EXDEV") {
+      await copyFile(stagedPath, dest);
+      await unlink(stagedPath);
+    } else {
+      throw err;
+    }
+  }
+  return dest;
 }
 
 async function exists(p: string): Promise<boolean> {

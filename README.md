@@ -67,6 +67,14 @@ Open http://localhost:3000.
 
 Downloads are saved to `./downloads/` as `Title [videoId].mp4`.
 
+> **Where files are written:** yt-dlp streams the (large, growing) video and its
+> temporary fragment files into a staging folder **outside** the project tree
+> (`~/.cache/yt-downloader`), then moves only the finished `.mp4` into
+> `./downloads`. This is deliberate — the Next dev server watches the project
+> root, and writing a multi-hundred-MB file there floods the file watcher and
+> crashes the dev server with a JS heap out-of-memory error. Set
+> `YTDL_DOWNLOAD_DIR=/some/path` to change the final destination.
+
 ### Production build
 
 ```bash
