@@ -42,10 +42,21 @@ export const DOWNLOAD_DIR =
  */
 const STAGING_DIR = path.join(os.homedir(), ".cache", "yt-downloader");
 
-/** yt-dlp format strings per selectable quality. */
+/**
+ * yt-dlp format strings per selectable quality.
+ *
+ * We force H.264 video (`vcodec^=avc1`) + AAC audio (`ext=m4a`) first, because
+ * YouTube increasingly serves AV1/VP9 inside mp4 containers and macOS
+ * QuickTime cannot decode those — you get a black picture with working audio.
+ * H.264 + AAC in mp4 plays in essentially every player. We fall back to any
+ * mp4 video, then to anything ≤ the height cap, only if H.264 is unavailable.
+ */
 const FORMAT_STRINGS: Record<Quality, string> = {
-  "720": "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]",
+  "720":
+    "bestvideo[height<=720][vcodec^=avc1]+bestaudio[ext=m4a]/" +
+    "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]",
   "1080":
+    "bestvideo[height<=1080][vcodec^=avc1]+bestaudio[ext=m4a]/" +
     "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]",
 };
 
