@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "YouTube Downloader",
+  title: "YouTube Downloader — Donloader",
   description: "Local-only YouTube video downloader (yt-dlp + ffmpeg).",
 };
 

@@ -43,3 +43,9 @@ next-env.d.ts
 # downloaded videos (keep the folder, ignore its contents)
 /downloads/*
 !/downloads/.gitkeep
+
+# design handoff artifacts (kept on disk for reference, not tracked)
+/YT Donloader.zip
+/_handoff/
+/claude design's questions/
+/yt-donloader.png

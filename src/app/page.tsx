@@ -1,35 +1,50 @@
+import Image from "next/image";
 import DownloadForm from "@/components/DownloadForm";
 
 /**
  * Page shell (server component). All interactivity lives in the client
- * <DownloadForm /> component.
+ * <DownloadForm /> component, which renders the prereq banner, URL bar and the
+ * active state directly as siblings of the header/footer inside `.app`.
  */
 export default function Home() {
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-5 py-10 sm:py-16">
-      <header className="flex flex-col gap-2">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-600 text-lg font-bold text-white">
-            ▶
-          </span>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            YouTube Downloader
-          </h1>
-        </div>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          Local-only. Paste a video URL, pick a quality, and it saves to your{" "}
-          <code className="rounded bg-neutral-200 px-1 py-0.5 text-xs dark:bg-neutral-800">
-            ./downloads
-          </code>{" "}
-          folder via yt-dlp + ffmpeg.
+    <div className="page">
+      <div className="app">
+        <header className="header">
+          <div className="brand-row">
+            <Image
+              className="avatar"
+              src="/don-avatar-220.png"
+              alt="Don, the Donloader mascot"
+              width={46}
+              height={46}
+              priority
+            />
+            <div className="titles">
+              <h1 className="t-main">YouTube Downloader</h1>
+              <span className="t-by">
+                by{" "}
+                <span className="wordmark">
+                  <span className="don">Don</span>
+                  <span className="loader">loader</span>
+                </span>
+              </span>
+            </div>
+          </div>
+          <p className="subtitle">
+            Runs locally on your machine — saves to{" "}
+            <span className="mono">./downloads</span> via yt-dlp&nbsp;+&nbsp;ffmpeg.
+            No login, no cloud.
+          </p>
+        </header>
+
+        <DownloadForm />
+
+        <p className="footer">
+          Single video only<span className="sep">·</span>720p / 1080p
+          <span className="sep">·</span>runs on your machine
         </p>
-      </header>
-
-      <DownloadForm />
-
-      <footer className="mt-auto pt-6 text-center text-xs text-neutral-400 dark:text-neutral-600">
-        Single video only · 720p / 1080p · runs on your machine
-      </footer>
-    </main>
+      </div>
+    </div>
   );
 }
